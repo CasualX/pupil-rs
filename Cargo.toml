@@ -1,0 +1,28 @@
+[package]
+name = "pupil"
+version = "0.1.0"
+authors = ["CasualX <CasualX@GitHub.com>"]
+
+description = "Arithmetic expression evaluator."
+
+documentation = "https://crates.fyi/crates/pupil"
+homepage = "https://github.com/CasualX/pupil-rs"
+repository = "https://github.com/CasualX/pupil-rs"
+
+readme = "readme.md"
+
+keywords = ["expr", "eval", "calc"]
+
+license = "MIT"
+
+[dependencies]
+libc = "0.2"
+
+[lib]
+name = "pupil"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pupil"
+path = "src/pupil.rs"
+doc = false
