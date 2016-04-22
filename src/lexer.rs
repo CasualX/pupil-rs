@@ -1,7 +1,6 @@
 //! Lexing.
 
-use ::std::{str, mem};
-use ::libc;
+use ::std::str;
 use super::env::Value;
 use super::op::Operator;
 
@@ -61,13 +60,24 @@ impl<'a> TokenIterator<'a> {
 	fn lex_lit(&mut self) -> Option<Token<'a>> {
 		let s = self.iter.as_str();
 		// Yeah let’s go `strtod`!
+		// ...
+		// Fun fact: Rust strings aren’t zero-terminated, but `strtod` cares...
+		// To ‘fix’ this, copy at most 31 bytes form input and zero terminate it.
+		// Alternatively malloc some memory with CString but are you mad? It’s just a few bytes.
+		// A test was added, I guess that means it’s all good :)
 		unsafe {
-			let s_num = s.as_bytes().as_ptr() as *const libc::c_char;
+			use ::std::mem;
+			use ::libc;
+			let mut s_num: [libc::c_char; 32] = mem::uninitialized();
+			let s_len = ::std::cmp::min(s.len(), 31);
+			(&mut s_num[..s_len]).clone_from_slice(mem::transmute(&s.as_bytes()[..s_len]));
+			s_num[s_len] = 0;
 			let mut s_end: *mut libc::c_char = mem::uninitialized();
-			let num = libc::strtod(s_num, &mut s_end);
-			if s_num != s_end {
+			let num = libc::strtod(s_num.as_ptr(), &mut s_end);
+			let read = s_end as usize - s_num.as_ptr() as usize;
+			if read != 0 {
 				// Update the iterator
-				self.iter = s.slice_unchecked(s_end as usize - s_num as usize, s.len()).chars();
+				self.iter = s[read..s.len()].chars();
 				Some(Token::Lit(num))
 			}
 			else {
@@ -167,7 +177,7 @@ mod tests {
 
 	#[test]
 	fn units() {
-		// Literals, can’t test NAN because reasons
+		// Literals, can’t test NaN because reasons
 		assert_eq!(tokenize("12.4 45 -0.111 inf").collect::<Vec<_>>(),
 			vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111), Lit(::std::f64::INFINITY)]);
 		// Functions and Variables
@@ -179,5 +189,8 @@ mod tests {
 		// Unknown
 		assert_eq!(tokenize("2 + 3 * !èè&").collect::<Vec<_>>(),
 			vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("!èè&")]);
+		// Regression test: fixed `strtod` from reading past the real input
+		assert_eq!(tokenize(&("1234"[..2])).collect::<Vec<_>>(),
+			vec![Lit(12.0)]);
 	}
 }

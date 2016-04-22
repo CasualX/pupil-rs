@@ -75,7 +75,7 @@ pub struct OpDesc {
 	pub unary: bool,
 }
 
-const OP_DESC: &'static [OpDesc; 7] = &[
+static OP_DESC: [OpDesc; 7] = [
 	OpDesc { pfn: builtin_add, pre: Order::AddSub, assoc: Assoc::Left, unary: true },
 	OpDesc { pfn: builtin_sub, pre: Order::AddSub, assoc: Assoc::Left, unary: true },
 	OpDesc { pfn: builtin_mul, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
