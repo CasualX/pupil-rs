@@ -51,7 +51,7 @@ impl<'a> Expr<'a> {
 		Ok(())
 	}
 	/// Finalize the expression and calculate the final result.
-	pub fn result(&mut self) -> Result<Value, Error> {
+	pub fn result(mut self) -> Result<Value, Error> {
 		// Must end at a value like token
 		if self.next == State::Val {
 			return Err(Error::UnfinishedExpression);
@@ -66,7 +66,7 @@ impl<'a> Expr<'a> {
 		Ok(self.vals[0])
 	}
 	/// Convenience method combines `feed` and `result`.
-	pub fn eval(&mut self, input: &str) -> Result<Value, Error> {
+	pub fn eval(mut self, input: &str) -> Result<Value, Error> {
 		try!(self.feed(input));
 		self.result()
 	}

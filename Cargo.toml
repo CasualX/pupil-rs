@@ -1,6 +1,6 @@
 [package]
 name = "pupil"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["CasualX <CasualX@GitHub.com>"]
 
 description = "Arithmetic expression evaluator."

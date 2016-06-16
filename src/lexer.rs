@@ -58,32 +58,11 @@ impl<'a> TokenIterator<'a> {
 		return false;
 	}
 	fn lex_lit(&mut self) -> Option<Token<'a>> {
-		let s = self.iter.as_str();
-		// Yeah let’s go `strtod`!
-		// ...
-		// Fun fact: Rust strings aren’t zero-terminated, but `strtod` cares...
-		// To ‘fix’ this, copy at most 31 bytes form input and zero terminate it.
-		// Alternatively malloc some memory with CString but are you mad? It’s just a few bytes.
-		// A test was added, I guess that means it’s all good :)
-		unsafe {
-			use ::std::mem;
-			use ::libc;
-			let mut s_num: [libc::c_char; 32] = mem::uninitialized();
-			let s_len = ::std::cmp::min(s.len(), 31);
-			(&mut s_num[..s_len]).clone_from_slice(mem::transmute(&s.as_bytes()[..s_len]));
-			s_num[s_len] = 0;
-			let mut s_end: *mut libc::c_char = mem::uninitialized();
-			let num = libc::strtod(s_num.as_ptr(), &mut s_end);
-			let read = s_end as usize - s_num.as_ptr() as usize;
-			if read != 0 {
-				// Update the iterator
-				self.iter = s[read..s.len()].chars();
-				Some(Token::Lit(num))
-			}
-			else {
-				None
-			}
-		}
+		strtod(self.iter.as_str()).map(|(num, s)| {
+			// Update the iterator
+			self.iter = s.chars();
+			Token::Lit(num)
+		})
 	}
 	fn lex_op(&mut self) -> Option<Token<'a>> {
 		let mut iter = self.iter.clone();
@@ -144,6 +123,32 @@ impl<'a> TokenIterator<'a> {
 	}
 }
 
+fn strtod(s: &str) -> Option<(f64, &str)> {
+	// Yeah let’s go `strtod`!
+	// ...
+	// Fun fact: Rust strings aren’t zero-terminated, but `strtod` cares...
+	// To ‘fix’ this, copy at most 31 bytes form input and zero terminate it.
+	// Alternatively malloc some memory with CString but are you mad? It’s just a few bytes.
+	// A test was added, I guess that means it’s all good :)
+	use ::std::mem;
+	use ::libc;
+	unsafe {
+		let mut s_num: [libc::c_char; 32] = mem::uninitialized();
+		let s_len = ::std::cmp::min(s.len(), 31);
+		(&mut s_num[..s_len]).clone_from_slice(mem::transmute(&s.as_bytes()[..s_len]));
+		s_num[s_len] = 0;
+		let mut s_end: *mut libc::c_char = mem::uninitialized();
+		let num = libc::strtod(s_num.as_ptr(), &mut s_end);
+		let read = s_end as usize - s_num.as_ptr() as usize;
+		if read != 0 {
+			Some((num as f64, &s[read..]))
+		}
+		else {
+			None
+		}
+	}
+}
+
 impl<'a> Iterator for TokenIterator<'a> {
 	type Item = Token<'a>;
 	fn next(&mut self) -> Option<Token<'a>> {
@@ -171,7 +176,7 @@ pub fn tokenize<'a>(input: &'a str) -> TokenIterator<'a> {
 
 #[cfg(test)]
 mod tests {
-	use super::tokenize;
+	use super::{tokenize, strtod};
 	use super::Token::*;
 	use super::super::op::Operator::*;
 
@@ -189,8 +194,10 @@ mod tests {
 		// Unknown
 		assert_eq!(tokenize("2 + 3 * !èè&").collect::<Vec<_>>(),
 			vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("!èè&")]);
+	}
+	#[test]
+	fn regressions() {
 		// Regression test: fixed `strtod` from reading past the real input
-		assert_eq!(tokenize(&("1234"[..2])).collect::<Vec<_>>(),
-			vec![Lit(12.0)]);
+		assert_eq!(strtod(&("1234"[..2])), Some((12.0, "")));
 	}
 }
