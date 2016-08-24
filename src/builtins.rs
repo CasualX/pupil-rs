@@ -12,10 +12,6 @@ pub fn builtin_id(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	if vals.len() == 1 { Ok(vals[0]) }
 	else { Err(Error::BadArgument) }
 }
-pub fn builtin_ans(env: &Env, vals: &mut [Value]) -> Result<Value, Error> {
-	if vals.len() == 0 { Ok(env.ans) }
-	else { Err(Error::BadArgument) }
-}
 pub fn builtin_add(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	if vals.len() > 0 { Ok(vals.iter().fold(0f64, |acc, x| acc + x)) }
 	else { Err(Error::BadArgument) }
@@ -180,7 +176,7 @@ pub fn builtin_pi(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	else { Err(Error::BadArgument) }
 }
 pub fn builtin_tau(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
-	if vals.len() == 0 { Ok(consts::PI * consts::PI) }
+	if vals.len() == 0 { Ok(consts::PI + consts::PI) }
 	else { Err(Error::BadArgument) }
 }
 pub fn builtin_sin(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {

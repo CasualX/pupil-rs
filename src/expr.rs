@@ -106,10 +106,8 @@ impl<'a> Expr<'a> {
 				}
 			},
 			Token::Var(id) => {
-				// Lookup the symbol
-				let pfn = try!(self.env.find(id).ok_or(Error::UnknownSymbol));
-				// Just evaluate it now
-				let result = try!(pfn(self.env, &mut []));
+				// Lookup the symbol variable
+				let result = try!(self.env.var(id).ok_or(Error::UnknownSymbol));
 				// And push the resulting value
 				self.vals.push(result);
 				// Followed by an operator

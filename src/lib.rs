@@ -32,9 +32,6 @@
 //!# extern crate pupil;
 //!# let mut env = pupil::Env::default();
 //! let result = pupil::Expr::new(&env).eval("2 + 3").unwrap();
-//! 
-//! // Note that you must update the ‘last answer’ manually like so:
-//! env.ans = result;
 //! ```
 
 extern crate libc;

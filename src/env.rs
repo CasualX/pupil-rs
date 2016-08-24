@@ -1,6 +1,7 @@
 //! Environment.
 
 use ::std::collections::HashMap;
+use ::std::borrow::Cow;
 use ::std::{fmt, error};
 use super::builtins::*;
 
@@ -60,76 +61,97 @@ pub type Value = f64;
 /// Signature for builtins.
 pub type BuiltinFn = fn(env: &Env, vals: &mut [Value]) -> Result<Value, Error>;
 
+static DEFAULT_BUILTINS: [(&'static str, BuiltinFn); 48] = [
+	("", builtin_id as BuiltinFn),
+	("add", builtin_add),
+	("sub", builtin_sub),
+	("mul", builtin_mul),
+	("div", builtin_div),
+	("rem", builtin_rem),
+	("pow", builtin_pow),
+	("floor", builtin_floor),
+	("ceil", builtin_ceil),
+	("round", builtin_round),
+	("abs", builtin_abs),
+	("sqr", builtin_sqr),
+	("cube", builtin_cube),
+	("sqrt", builtin_sqrt),
+	("cbrt", builtin_cbrt),
+	("min", builtin_min),
+	("max", builtin_max),
+	("exp", builtin_exp),
+	("exp2", builtin_exp2),
+	("expm1", builtin_expm1),
+	("ln", builtin_ln),
+	("log", builtin_log),
+	("log2", builtin_log2),
+	("log10", builtin_log10),
+	("ln1p", builtin_ln1p),
+	("e", builtin_e),
+	("mean", builtin_mean),
+	("median", builtin_median),
+	("range", builtin_range),
+	("var", builtin_var),
+	("stdev", builtin_stdev),
+	("deg", builtin_deg),
+	("rad", builtin_rad),
+	("pi", builtin_pi),
+	("tau", builtin_tau),
+	("sin", builtin_sin),
+	("cos", builtin_cos),
+	("tan", builtin_tan),
+	("asin", builtin_sin),
+	("acos", builtin_cos),
+	("atan", builtin_tan),
+	("atan2", builtin_atan2),
+	("sinh", builtin_sinh),
+	("cosh", builtin_cosh),
+	("tanh", builtin_tanh),
+	("asinh", builtin_asinh),
+	("acosh", builtin_acosh),
+	("atanh", builtin_atanh),
+];
+
 /// The environment.
 ///
 /// Stores the builtins available to expressions and the last answer.
 pub struct Env {
-	map: HashMap<&'static str, BuiltinFn>,
-	pub ans: Value,
+	builtins: HashMap<&'static str, BuiltinFn>,
+	vars: HashMap<Cow<'static, str>, Value>,
 }
 
 impl Env {
 	/// Create a new environment.
 	pub fn new() -> Env {
 		Env {
-			map: HashMap::new(),
-			ans: 0.0,
+			builtins: HashMap::new(),
+			vars: HashMap::new(),
 		}
 	}
 	pub fn init(&mut self) {
-		self.map.insert("", builtin_id);
-		self.map.insert("ans", builtin_ans);
-		self.map.insert("add", builtin_add);
-		self.map.insert("sub", builtin_sub);
-		self.map.insert("mul", builtin_mul);
-		self.map.insert("div", builtin_div);
-		self.map.insert("rem", builtin_rem);
-		self.map.insert("pow", builtin_pow);
-		self.map.insert("floor", builtin_floor);
-		self.map.insert("ceil", builtin_ceil);
-		self.map.insert("round", builtin_round);
-		self.map.insert("abs", builtin_abs);
-		self.map.insert("sqr", builtin_sqr);
-		self.map.insert("cube", builtin_cube);
-		self.map.insert("sqrt", builtin_sqrt);
-		self.map.insert("cbrt", builtin_cbrt);
-		self.map.insert("min", builtin_min);
-		self.map.insert("max", builtin_max);
-		self.map.insert("exp", builtin_exp);
-		self.map.insert("exp2", builtin_exp2);
-		self.map.insert("expm1", builtin_expm1);
-		self.map.insert("ln", builtin_ln);
-		self.map.insert("log", builtin_log);
-		self.map.insert("log2", builtin_log2);
-		self.map.insert("log10", builtin_log10);
-		self.map.insert("ln1p", builtin_ln1p);
-		self.map.insert("e", builtin_e);
-		self.map.insert("mean", builtin_mean);
-		self.map.insert("median", builtin_median);
-		self.map.insert("range", builtin_range);
-		self.map.insert("var", builtin_var);
-		self.map.insert("stdev", builtin_stdev);
-		self.map.insert("deg", builtin_deg);
-		self.map.insert("rad", builtin_rad);
-		self.map.insert("pi", builtin_pi);
-		self.map.insert("tau", builtin_tau);
-		self.map.insert("sin", builtin_sin);
-		self.map.insert("cos", builtin_cos);
-		self.map.insert("tan", builtin_tan);
-		self.map.insert("asin", builtin_sin);
-		self.map.insert("acos", builtin_cos);
-		self.map.insert("atan", builtin_tan);
-		self.map.insert("atan2", builtin_atan2);
-		self.map.insert("sinh", builtin_sin);
-		self.map.insert("cosh", builtin_cos);
-		self.map.insert("tanh", builtin_tan);
-		self.map.insert("asinh", builtin_sin);
-		self.map.insert("acosh", builtin_cos);
-		self.map.insert("atanh", builtin_tan);
+		for builtin in &DEFAULT_BUILTINS[..] {
+			self.builtins.insert(builtin.0, builtin.1);
+		}
 	}
 	/// Find a builtin.
 	pub fn find(&self, id: &str) -> Option<BuiltinFn> {
-		self.map.get(id).map(|&x| x)
+		self.builtins.get(id).map(|&x| x)
+	}
+	/// Find a variable.
+	pub fn var(&self, id: &str) -> Option<Value> {
+		// For now constants `pi`, `e` and `tau` are builtins that take no arguments...
+		// If this fails, look up in the `self.vars` hashmap.
+		self.builtins.get(id)
+			.and_then(|&x| x(self, &mut []).ok())
+			.or_else(|| self.vars.get(id).map(|&x| x))
+	}
+	/// Set a variable.
+	pub fn set_var<I: Into<Cow<'static, str>>>(&mut self, id: I, val: Value) {
+		// If this isn't inlined it should help with monomorphization.
+		fn internal_set_var(env: &mut Env, id: Cow<'static, str>, val: Value) {
+			*env.vars.entry(id).or_insert(val) = val;
+		}
+		internal_set_var(self, id.into(), val);
 	}
 }
 impl Default for Env {
@@ -137,5 +159,20 @@ impl Default for Env {
 		let mut env = Env::new();
 		env.init();
 		env
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn var() {
+		let mut env = Env::default();
+		// Regular variables.
+		env.set_var("ans", 12.4);
+		assert_eq!(env.var("ans"), Some(12.4));
+		// Constants can be looked up.
+		assert_eq!(env.var("pi"), Some(::std::f64::consts::PI));
 	}
 }

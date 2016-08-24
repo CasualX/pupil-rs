@@ -1,6 +1,6 @@
 [package]
 name = "pupil"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["CasualX <CasualX@GitHub.com>"]
 
 description = "Arithmetic expression evaluator."
@@ -18,11 +18,6 @@ license = "MIT"
 [dependencies]
 libc = "0.2"
 
-[lib]
-name = "pupil"
-path = "src/lib.rs"
-
 [[bin]]
 name = "pupil"
-path = "src/pupil.rs"
 doc = false

@@ -57,7 +57,9 @@ This library can be found on [crates.io](https://crates.io/crates/pupil). In you
 pupil = "0.1"
 ```
 
-A practical example can be found in `src/pupil.rs`.
+A practical example can be found in `src/bin/pupil.rs`.
+
+Documentation can be found online [here](https://casualx.github.io/pupil-rs/0.1.3/pupil).
 
 Start things off by creating its environment which will hold the available builtins and the last answer.
 
@@ -87,9 +89,6 @@ You can perform the expression evaluation in a single step.
 
 ```rust
 let result = pupil::Expr::new(&env).eval("2 + 3").unwrap();
-
-// Note that you must update the ‘last answer’ manually like so:
-env.ans = result;
 ```
 
 That’s it.

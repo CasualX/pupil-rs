@@ -81,7 +81,7 @@ Built-in functions:
 				match pupil::Expr::new(&env).eval(&line) {
 					Ok(val) => {
 						println!("{}", val);
-						env.ans = val;
+						env.set_var("ans", val);
 					},
 					Err(e) => {
 						writeln!(io::stderr(), "Err: {}!", e).ok();

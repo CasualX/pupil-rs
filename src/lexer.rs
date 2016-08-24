@@ -184,7 +184,7 @@ mod tests {
 	fn units() {
 		// Literals, can’t test NaN because reasons
 		assert_eq!(tokenize("12.4 45 -0.111 inf").collect::<Vec<_>>(),
-			vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111), Lit(::std::f64::INFINITY)]);
+			vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111), Var("inf")]);
 		// Functions and Variables
 		assert_eq!(tokenize("fn(12, (2ans))-pi").collect::<Vec<_>>(),
 			vec![Open("fn"), Lit(12.0), Comma, Open(""), Lit(2.0), Var("ans"), Close, Close, Op(Sub), Var("pi")]);
@@ -198,6 +198,6 @@ mod tests {
 	#[test]
 	fn regressions() {
 		// Regression test: fixed `strtod` from reading past the real input
-		assert_eq!(strtod(&("1234"[..2])), Some((12.0, "")));
+		assert_eq!(strtod(&"1234"[..2]), Some((12.0, "")));
 	}
 }
