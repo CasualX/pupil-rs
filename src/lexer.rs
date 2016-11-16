@@ -6,7 +6,7 @@ use super::op::Operator;
 
 //----------------------------------------------------------------
 
-/// Supported tokens types.
+/// Token types.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'a> {
 	/// Unknown token.
@@ -40,6 +40,7 @@ pub enum Token<'a> {
 //----------------------------------------------------------------
 
 /// Iterator over tokens in a string.
+#[derive(Clone, Debug)]
 pub struct TokenIterator<'a> {
 	iter: str::Chars<'a>,
 }
@@ -58,15 +59,15 @@ impl<'a> TokenIterator<'a> {
 		return false;
 	}
 	fn lex_lit(&mut self) -> Option<Token<'a>> {
-		strtod(self.iter.as_str()).map(|(num, s)| {
-			// Update the iterator
-			self.iter = s.chars();
+		strtod(self.iter.as_str()).map(|(num, tail_s)| {
+			// Update the iterator to right after the number
+			self.iter = tail_s.chars();
 			Token::Lit(num)
 		})
 	}
 	fn lex_op(&mut self) -> Option<Token<'a>> {
 		let mut iter = self.iter.clone();
-		if let Some(chr) = iter.next() {
+		iter.next().and_then(|chr| {
 			let tok = match chr {
 				'+' => Token::Op(Operator::Add),
 				'-' => Token::Op(Operator::Sub),
@@ -80,10 +81,7 @@ impl<'a> TokenIterator<'a> {
 			};
 			self.iter = iter;
 			Some(tok)
-		}
-		else {
-			None
-		}
+		})
 	}
 	fn lex_id(&mut self) -> Option<Token<'a>> {
 		let s = self.iter.as_str();
@@ -96,9 +94,8 @@ impl<'a> TokenIterator<'a> {
 		let (s_id, s_rem) = s.split_at(end);
 		// Check for opening parenthesis
 		let mut paren_it = s_rem.chars();
-		let paren = if let Some(chr) = paren_it.next() { chr == '(' } else { false };
 		// Parenthesis means a function begin
-		if paren {
+		if paren_it.next() == Some('(') {
 			self.iter = paren_it;
 			Some(Token::Open(s_id))
 		}
@@ -155,10 +152,10 @@ impl<'a> Iterator for TokenIterator<'a> {
 		// Start by skipping over the whitespace
 		if self.skip_whitespace() {
 			// Try lexing as various tokens
-			if let tok @ Some(_) = self.lex_op() { tok }
-			else if let tok @ Some(_) = self.lex_lit() { tok }
-			else if let tok @ Some(_) = self.lex_id() { tok }
-			else { self.lex_unk() }
+			self.lex_op()
+				.or_else(|| self.lex_lit())
+				.or_else(|| self.lex_id())
+				.or_else(|| self.lex_unk())
 		}
 		// End of string
 		else {
@@ -167,7 +164,7 @@ impl<'a> Iterator for TokenIterator<'a> {
 	}
 }
 
-/// Create a new TokenIterator for a string.
+/// Creates an iterator over the tokens in a string.
 pub fn tokenize<'a>(input: &'a str) -> TokenIterator<'a> {
 	TokenIterator {
 		iter: input.chars(),
@@ -182,9 +179,9 @@ mod tests {
 
 	#[test]
 	fn units() {
-		// Literals, can’t test NaN because reasons
-		assert_eq!(tokenize("12.4 45 -0.111 inf").collect::<Vec<_>>(),
-			vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111), Var("inf")]);
+		// Literals, RIP "inf" support
+		assert_eq!(tokenize("12.4 45 -0.111").collect::<Vec<_>>(),
+			vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111)]);
 		// Functions and Variables
 		assert_eq!(tokenize("fn(12, (2ans))-pi").collect::<Vec<_>>(),
 			vec![Open("fn"), Lit(12.0), Comma, Open(""), Lit(2.0), Var("ans"), Close, Close, Op(Sub), Var("pi")]);

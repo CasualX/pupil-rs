@@ -33,7 +33,7 @@ Built-in functions:
 	}
 
 	// Initialize the environment
-	let mut env = pupil::Env::default();
+	let mut env = pupil::BasicEnv::default();
 
 	// Eval the command line args
 	if args.len() > 1 {
@@ -81,7 +81,7 @@ Built-in functions:
 				match pupil::Expr::new(&env).eval(&line) {
 					Ok(val) => {
 						println!("{}", val);
-						env.set_var("ans", val);
+						env.ans = val;
 					},
 					Err(e) => {
 						writeln!(io::stderr(), "Err: {}!", e).ok();

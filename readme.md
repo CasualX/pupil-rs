@@ -50,7 +50,9 @@ It has three different use cases:
 Library
 -------
 
-This library can be found on [crates.io](https://crates.io/crates/pupil). In your `Cargo.toml` put:
+This library can be found on [crates.io](https://crates.io/crates/pupil).
+
+In your `Cargo.toml` put:
 
 ```
 [dependencies]
@@ -59,17 +61,18 @@ pupil = "0.1"
 
 A practical example can be found in `src/bin/pupil.rs`.
 
-Documentation can be found online [here](https://casualx.github.io/pupil-rs/0.1.3/pupil).
+Documentation can be found on [docs.rs](https://docs.rs/pupil).
+
+Usage
+-----
 
 Start things off by creating its environment which will hold the available builtins and the last answer.
 
 ```rust
 extern crate pupil;
 
-// Creates an empty environment.
-let empty = pupil::Env::new();
-// Creates an environment initialized with the default builtins.
-let env = pupil::Env::default();
+// Creates a basic environment with the default builtins.
+let env = pupil::BasicEnv::default();
 ```
 
 Create an expression and bind it to its environment.

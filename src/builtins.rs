@@ -116,7 +116,7 @@ pub fn builtin_e(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	else { Err(Error::BadArgument) }
 }
 pub fn builtin_mean(env: &Env, vals: &mut [Value]) -> Result<Value, Error> {
-	Ok(try!(builtin_add(env, vals)) / vals.len() as Value)
+	Ok(builtin_add(env, vals)? / vals.len() as Value)
 }
 pub fn builtin_median(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	if vals.len() > 0 {
@@ -157,11 +157,11 @@ pub fn builtin_range(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	}
 }
 pub fn builtin_var(env: &Env, vals: &mut [Value]) -> Result<Value, Error> {
-	let mean = try!(builtin_mean(env, vals));
+	let mean = builtin_mean(env, vals)?;
 	Ok(vals.iter().fold(0f64, |acc, &x| acc + (x - mean) * (x - mean)) / vals.len() as Value)
 }
 pub fn builtin_stdev(env: &Env, vals: &mut [Value]) -> Result<Value, Error> {
-	Ok(try!(builtin_var(env, vals)).sqrt())
+	Ok(builtin_var(env, vals)?.sqrt())
 }
 pub fn builtin_deg(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 	if vals.len() == 1 { Ok(vals[0] * (180f64 / consts::PI)) }
@@ -235,11 +235,11 @@ pub fn builtin_atanh(_: &Env, vals: &mut [Value]) -> Result<Value, Error> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use super::super::env::Env;
+	use super::super::env::BasicEnv;
 
 	#[test]
 	fn stats() {
-		let env = Env::new();
+		let env = BasicEnv::default();
 		assert_eq!(builtin_mean(&env, &mut [1.0, 2.0, 4.0, -1.0]), Ok(1.5));
 		assert_eq!(builtin_median(&env, &mut [2.0, 1.0, 4.0]), Ok(2.0));
 		assert_eq!(builtin_median(&env, &mut [8.0, 4.0]), Ok(6.0));

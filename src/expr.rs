@@ -24,7 +24,7 @@ pub struct Expr<'a> {
 }
 
 impl<'a> Expr<'a> {
-	/// Create a new expression and bind it to an environment.
+	/// Creates a new expression and binds it to the environment.
 	pub fn new(env: &'a Env) -> Expr<'a> {
 		Expr {
 			env: env,
@@ -33,31 +33,31 @@ impl<'a> Expr<'a> {
 			next: State::Val,
 		}
 	}
-	/// Parse a token.
+	/// Parses a token.
 	pub fn parse(&mut self, tok: Token) -> Result<(), Error> {
 		match self.next {
 			State::Op => self.parse_op(tok),
 			State::Val => self.parse_val(tok),
 		}
 	}
-	/// Feed new input to be parsed and evaluated.
+	/// Feeds new input to be parsed and evaluated.
 	pub fn feed(&mut self, input: &str) -> Result<(), Error> {
 		// Tokenize and parse the input
 		for tok in tokenize(input) {
 			// Dispatch based on a simple state machine:
 			//  expect either an operator or value like token.
-			try!(self.parse(tok));
+			self.parse(tok)?;
 		}
 		Ok(())
 	}
-	/// Finalize the expression and calculate the final result.
+	/// Finalizes the expression and calculates the final result.
 	pub fn result(mut self) -> Result<Value, Error> {
 		// Must end at a value like token
 		if self.next == State::Val {
 			return Err(Error::UnfinishedExpression);
 		}
 		// Evaluate all pending operators
-		try!(self.eval_while(Order::Operators));
+		self.eval_gt(Order::FnBarrier)?;
 		// Expect exactly one result
 		if self.vals.len() != 1 || self.fns.len() != 0 {
 			return Err(Error::UnbalancedParens);
@@ -65,9 +65,9 @@ impl<'a> Expr<'a> {
 		// Return the result
 		Ok(self.vals[0])
 	}
-	/// Convenience method combines `feed` and `result`.
+	/// Evaluates and calculates the result in one step.
 	pub fn eval(mut self, input: &str) -> Result<Value, Error> {
-		try!(self.feed(input));
+		self.feed(input)?;
 		self.result()
 	}
 }
@@ -107,7 +107,7 @@ impl<'a> Expr<'a> {
 			},
 			Token::Var(id) => {
 				// Lookup the symbol variable
-				let result = try!(self.env.var(id).ok_or(Error::UnknownSymbol));
+				let result = self.env.value(id)?;
 				// And push the resulting value
 				self.vals.push(result);
 				// Followed by an operator
@@ -116,7 +116,7 @@ impl<'a> Expr<'a> {
 			},
 			Token::Open(id) => {
 				// Lookup the symbol
-				let pfn = try!(self.env.find(id).ok_or(Error::UnknownSymbol));
+				let pfn = self.env.builtin(id)?;
 				// Push with very low precedence, acts as a barrier
 				self.fns.push(FnVal {
 					pfn: pfn,
@@ -153,15 +153,12 @@ impl<'a> Expr<'a> {
 			Token::Op(op) => {
 				// Get relevant operator descriptor
 				let desc = op.desc();
-				let pre = match desc.assoc {
-					Assoc::Left => desc.pre,
-					Assoc::Right => Order::PowRightAssoc,
+				// Evaluate all lower precedence fns
+				match desc.assoc {
+					Assoc::Left => self.eval_ge(desc.pre)?,
+					Assoc::Right => self.eval_gt(desc.pre)?,
 					Assoc::None => return Err(Error::InternalCorruption),
 				};
-				// Evaluate all lower precedence fns
-				// HACK! This evaluates precedence with >= which is correct for left associativity
-				//       Right associativity needs a plain > which is basically the same as precedence + 1 but it’s an enum so bleh...
-				try!(self.eval_while(pre));
 				// Push operator as fn, always takes two arguments
 				self.fns.push(FnVal {
 					pfn: desc.pfn,
@@ -174,29 +171,29 @@ impl<'a> Expr<'a> {
 			},
 			Token::Var(_) => {
 				// Insert implicit multiplication token
-				try!(self.parse_op(Token::Op(Operator::IMul)));
+				self.parse_op(Token::Op(Operator::IMul))?;
 				// Retry inserting this token
 				self.parse_val(tok)
 			},
 			Token::Open(_) => {
 				// Insert implicit multiplication token
-				try!(self.parse_op(Token::Op(Operator::IMul)));
+				self.parse_op(Token::Op(Operator::IMul))?;
 				// Retry inserting this token
 				self.parse_val(tok)
 			},
 			Token::Comma => {
 				// Eval until an fn barier
-				try!(self.eval_while(Order::Operators));
+				self.eval_gt(Order::FnBarrier)?;
 				// Increment nargs for that fn
-				try!(self.fns.last_mut().ok_or(Error::MisplacedComma)).nargs += 1;
+				self.fns.last_mut().ok_or(Error::MisplacedComma)?.nargs += 1;
 				// Followed by a value
 				self.next = State::Val;
 				Ok(())
 			},
 			Token::Close => {
 				// Eval everything until the fn barrier and push past it
-				try!(self.eval_while(Order::Operators));
-				try!(self.eval_apply());
+				self.eval_gt(Order::FnBarrier)?;
+				self.eval_apply()?;
 				// Followed by an operator
 				self.next = State::Op;
 				Ok(())
@@ -204,9 +201,16 @@ impl<'a> Expr<'a> {
 		}
 	}
 	// Eval all fns with higher or equal precedence.
-	fn eval_while(&mut self, pre: Order) -> Result<(), Error> {
+	fn eval_ge(&mut self, pre: Order) -> Result<(), Error> {
 		while self.fns.last().map(|f| f.pre >= pre).unwrap_or(false) {
-			try!(self.eval_apply());
+			self.eval_apply()?;
+		}
+		Ok(())
+	}
+	// Eval all fns with strictly higher precedence.
+	fn eval_gt(&mut self, pre: Order) -> Result<(), Error> {
+		while self.fns.last().map(|f| f.pre > pre).unwrap_or(false) {
+			self.eval_apply()?;
 		}
 		Ok(())
 	}
@@ -223,10 +227,10 @@ impl<'a> Expr<'a> {
 			// Apply the fn
 			let result = {
 				let vals = &mut self.vals[args.clone()];
-				try!((f.pfn)(self.env, vals))
+				(f.pfn)(self.env, vals)?
 			};
 			// Pop vals and push result
-			{ self.vals.drain(args.clone()) };
+			let _ = self.vals.drain(args.clone());
 			self.vals.push(result);
 			Ok(())
 		}
@@ -244,7 +248,7 @@ mod tests {
 
 	#[test]
 	fn basics() {
-		let env = Env::new();
+		let env = BasicEnv::default();
 		assert_eq!(Expr::new(&env).eval("2 + 3"), Ok(5.0));
 		assert_eq!(Expr::new(&env).eval("2-3*4"), Ok(-10.0));
 		assert_eq!(Expr::new(&env).eval("2*3+4"), Ok(10.0));
@@ -254,13 +258,13 @@ mod tests {
 	}
 	#[test]
 	fn funcs() {
-		let env = Env::default();
+		let env = BasicEnv::default();
 		assert_eq!(Expr::new(&env).eval("2*(3+4)"), Ok(14.0));
 		assert_eq!(Expr::new(&env).eval("mul(2,add(3,4))"), Ok(14.0));
 	}
 	#[test]
 	fn errors() {
-		let env = Env::default();
+		let env = BasicEnv::default();
 		assert_eq!(Expr::new(&env).eval(""), Err(Error::UnfinishedExpression));
 		assert_eq!(Expr::new(&env).eval("12 5"), Err(Error::ExpectOperator));
 		assert_eq!(Expr::new(&env).eval(","), Err(Error::NaExpression));
@@ -272,7 +276,8 @@ mod tests {
 		assert_eq!(Expr::new(&env).eval("(3))"), Err(Error::UnbalancedParens));
 		assert_eq!(Expr::new(&env).eval("2,"), Err(Error::MisplacedComma));
 		assert_eq!(Expr::new(&env).eval("pi()"), Err(Error::BadArgument));
-		assert_eq!(Expr::new(&env).eval("hello(5)"), Err(Error::UnknownSymbol));
-		assert_eq!(Expr::new(&env).eval("hi"), Err(Error::UnknownSymbol));
+		assert_eq!(Expr::new(&env).eval("mean"), Err(Error::EnvError(EnvError::Builtin)));
+		assert_eq!(Expr::new(&env).eval("hello(5)"), Err(Error::EnvError(EnvError::NotFound)));
+		assert_eq!(Expr::new(&env).eval("hi"), Err(Error::EnvError(EnvError::NotFound)));
 	}
 }

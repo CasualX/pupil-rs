@@ -11,24 +11,20 @@ pub enum Order {
 	///
 	/// Prevents precedence rules from pushing past a function application.
 	/// Only an explicit closing `)` can push past it.
-	FnBarrier = 1,
-	/// Lowest precedence for operators, helper for `FnBarrier`.
-	Operators = 2,
+	FnBarrier,
 	/// Addition and subtraction precedence.
-	AddSub = 3,
+	AddSub,
 	/// Multiplication and division precedence.
-	MulDiv = 4,
+	MulDiv,
 	/// Implicit multiplication precedence.
 	///
 	/// This makes implicit mul bind tightly under division allowing `1/2ans` to be evaulated as `1/(2*ans)`.
 	/// But not high enough to overpower exponentiation so `2ans^3` will be evaluated as `2*(ans^3)`.
-	IMul = 5,
+	IMul,
 	/// Exponentiation precedence.
-	Pow = 6,
-	/// Helper for `Pow`’s right associativity.
-	PowRightAssoc = 7,
+	Pow,
 	/// Unary operator precedence.
-	Unary = 8,
+	Unary,
 }
 
 /// Operator associativity.
@@ -86,7 +82,7 @@ static OP_DESC: [OpDesc; 7] = [
 ];
 
 impl Operator {
-	/// Get a descriptor for an operator.
+	/// Returns the operator’s descriptor.
 	#[inline]
 	pub fn desc(self) -> &'static OpDesc {
 		&OP_DESC[self as usize]

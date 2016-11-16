@@ -1,24 +1,30 @@
 //! Environment.
 
-use ::std::collections::HashMap;
-use ::std::borrow::Cow;
 use ::std::{fmt, error};
 use super::builtins::*;
 
 //----------------------------------------------------------------
 
 /// Things that can go wrong while evaluating.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Error {
 	/// Expected an operator-like thing.
+	///
+	/// Eg. `12 5`. Expected an operator instead of `5`.
 	ExpectOperator,
 	/// Expected a value-like thing.
 	NaExpression,
 	/// Disallowed unary operator.
+	///
+	/// Only `+` and `-` are allowed as unary operators.
 	DisallowedUnary,
 	/// Something went wrong unexpectedly.
+	///
+	/// This is a bug.
 	InternalCorruption,
 	/// Expression isn’t finished, cannot end with an operator.
+	///
+	/// Eg. `2 +`.
 	UnfinishedExpression,
 	/// Tokenization failed to lex a token.
 	InvalidToken,
@@ -29,7 +35,12 @@ pub enum Error {
 	/// Bad number of arguments.
 	BadArgument,
 	/// A variable or function symbol wasn’t found.
-	UnknownSymbol,
+	EnvError(EnvError),
+}
+impl From<EnvError> for Error {
+	fn from(env_err: EnvError) -> Error {
+		Error::EnvError(env_err)
+	}
 }
 impl fmt::Display for Error {
 	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -48,7 +59,13 @@ impl error::Error for Error {
 			Error::UnbalancedParens => "unbalanced parens",
 			Error::MisplacedComma => "misplaced comma",
 			Error::BadArgument => "bad argument",
-			Error::UnknownSymbol => "unknown symbol",
+			Error::EnvError(_) => "env error",
+		}
+	}
+	fn cause(&self) -> Option<&error::Error> {
+		match *self {
+			Error::EnvError(ref err) => Some(err),
+			_ => None,
 		}
 	}
 }
@@ -63,104 +80,134 @@ pub type BuiltinFn = fn(env: &Env, vals: &mut [Value]) -> Result<Value, Error>;
 
 static DEFAULT_BUILTINS: [(&'static str, BuiltinFn); 48] = [
 	("", builtin_id as BuiltinFn),
-	("add", builtin_add),
-	("sub", builtin_sub),
-	("mul", builtin_mul),
-	("div", builtin_div),
-	("rem", builtin_rem),
-	("pow", builtin_pow),
-	("floor", builtin_floor),
-	("ceil", builtin_ceil),
-	("round", builtin_round),
 	("abs", builtin_abs),
-	("sqr", builtin_sqr),
-	("cube", builtin_cube),
-	("sqrt", builtin_sqrt),
+	("acos", builtin_cos),
+	("acosh", builtin_acosh),
+	("add", builtin_add),
+	("asin", builtin_sin),
+	("asinh", builtin_asinh),
+	("atan", builtin_tan),
+	("atan2", builtin_atan2),
+	("atanh", builtin_atanh),
 	("cbrt", builtin_cbrt),
-	("min", builtin_min),
-	("max", builtin_max),
+	("ceil", builtin_ceil),
+	("cos", builtin_cos),
+	("cosh", builtin_cosh),
+	("cube", builtin_cube),
+	("deg", builtin_deg),
+	("div", builtin_div),
+	("e", builtin_e),
 	("exp", builtin_exp),
 	("exp2", builtin_exp2),
 	("expm1", builtin_expm1),
+	("floor", builtin_floor),
 	("ln", builtin_ln),
-	("log", builtin_log),
-	("log2", builtin_log2),
-	("log10", builtin_log10),
 	("ln1p", builtin_ln1p),
-	("e", builtin_e),
+	("log", builtin_log),
+	("log10", builtin_log10),
+	("log2", builtin_log2),
+	("max", builtin_max),
 	("mean", builtin_mean),
 	("median", builtin_median),
-	("range", builtin_range),
-	("var", builtin_var),
-	("stdev", builtin_stdev),
-	("deg", builtin_deg),
-	("rad", builtin_rad),
+	("min", builtin_min),
+	("mul", builtin_mul),
 	("pi", builtin_pi),
-	("tau", builtin_tau),
+	("pow", builtin_pow),
+	("rad", builtin_rad),
+	("range", builtin_range),
+	("rem", builtin_rem),
+	("round", builtin_round),
 	("sin", builtin_sin),
-	("cos", builtin_cos),
-	("tan", builtin_tan),
-	("asin", builtin_sin),
-	("acos", builtin_cos),
-	("atan", builtin_tan),
-	("atan2", builtin_atan2),
 	("sinh", builtin_sinh),
-	("cosh", builtin_cosh),
+	("sqr", builtin_sqr),
+	("sqrt", builtin_sqrt),
+	("stdev", builtin_stdev),
+	("sub", builtin_sub),
+	("tan", builtin_tan),
 	("tanh", builtin_tanh),
-	("asinh", builtin_asinh),
-	("acosh", builtin_acosh),
-	("atanh", builtin_atanh),
+	("tau", builtin_tau),
+	("var", builtin_var),
 ];
+
+/// Environment lookup errors.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EnvError {
+	/// The symbol wasn't found.
+	NotFound,
+	/// The symbol is a builtin function, but a value was expected.
+	Builtin,
+}
+impl fmt::Display for EnvError {
+	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+		error::Error::description(self).fmt(f)
+	}
+}
+impl error::Error for EnvError {
+	fn description(&self) -> &str {
+		match *self {
+			EnvError::NotFound => "not found",
+			EnvError::Builtin => "builtin",
+		}
+	}
+}
+
+//----------------------------------------------------------------
+
+use ::std::borrow::Cow;
 
 /// The environment.
 ///
 /// Stores the builtins available to expressions and the last answer.
-pub struct Env {
-	builtins: HashMap<&'static str, BuiltinFn>,
-	vars: HashMap<Cow<'static, str>, Value>,
+pub trait Env {
+	/// Lookup a builtin function by id.
+	fn builtin(&self, id: &str) -> Result<BuiltinFn, EnvError>;
+	/// Lookup a value by id.
+	fn value(&self, id: &str) -> Result<Value, EnvError>;
+	/// Set a variable by id.
+	fn set(&mut self, id: Cow<'static, str>, value: Value) -> Result<(), EnvError>;
 }
 
-impl Env {
-	/// Create a new environment.
-	pub fn new() -> Env {
-		Env {
-			builtins: HashMap::new(),
-			vars: HashMap::new(),
+/// Basic environment.
+///
+/// Supports just the default builtins and saves the last variable.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BasicEnv {
+	pub ans: Value,
+}
+impl Default for BasicEnv {
+	fn default() -> BasicEnv {
+		BasicEnv {
+			ans: 0f64,
 		}
-	}
-	pub fn init(&mut self) {
-		for builtin in &DEFAULT_BUILTINS[..] {
-			self.builtins.insert(builtin.0, builtin.1);
-		}
-	}
-	/// Find a builtin.
-	pub fn find(&self, id: &str) -> Option<BuiltinFn> {
-		self.builtins.get(id).map(|&x| x)
-	}
-	/// Find a variable.
-	pub fn var(&self, id: &str) -> Option<Value> {
-		// For now constants `pi`, `e` and `tau` are builtins that take no arguments...
-		// If this fails, look up in the `self.vars` hashmap.
-		self.builtins.get(id)
-			.and_then(|&x| x(self, &mut []).ok())
-			.or_else(|| self.vars.get(id).map(|&x| x))
-	}
-	/// Set a variable.
-	pub fn set_var<I: Into<Cow<'static, str>>>(&mut self, id: I, val: Value) {
-		// If this isn't inlined it should help with monomorphization.
-		fn internal_set_var(env: &mut Env, id: Cow<'static, str>, val: Value) {
-			*env.vars.entry(id).or_insert(val) = val;
-		}
-		internal_set_var(self, id.into(), val);
 	}
 }
-impl Default for Env {
-	fn default() -> Env {
-		let mut env = Env::new();
-		env.init();
-		env
+impl Env for BasicEnv {
+	fn builtin(&self, id: &str) -> Result<BuiltinFn, EnvError> {
+		match DEFAULT_BUILTINS.binary_search_by_key(&id, |it| it.0) {
+			Ok(index) => Ok(DEFAULT_BUILTINS[index].1),
+			Err(_) => Err(EnvError::NotFound),
+		}
+	}
+	fn value(&self, id: &str) -> Result<Value, EnvError> {
+		if id == "ans" {
+			Ok(self.ans)
+		}
+		else {
+			self.builtin(id).and_then(|f| f(self, &mut []).map_err(|_| EnvError::Builtin))
+		}
+	}
+	fn set(&mut self, id: Cow<'static, str>, value: Value) -> Result<(), EnvError> {
+		if id.as_ref() == "ans" {
+			self.ans = value;
+			Ok(())
+		}
+		else {
+			Err(EnvError::NotFound)
+		}
 	}
 }
+
+//----------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
@@ -168,11 +215,18 @@ mod tests {
 
 	#[test]
 	fn var() {
-		let mut env = Env::default();
-		// Regular variables.
-		env.set_var("ans", 12.4);
-		assert_eq!(env.var("ans"), Some(12.4));
-		// Constants can be looked up.
-		assert_eq!(env.var("pi"), Some(::std::f64::consts::PI));
+		let mut env = BasicEnv::default();
+		env.set("ans".into(), 12.4).unwrap();
+		assert_eq!(env.value("ans"), Ok(12.4));
+		assert_eq!(env.value("pi"), Ok(::std::f64::consts::PI));
+		assert_eq!(env.value("unknown"), Err(EnvError::NotFound));
+		assert_eq!(env.value("mean"), Err(EnvError::Builtin));
+		
+		// Assert the default builtins are sorted
+		let mut copy = super::DEFAULT_BUILTINS;
+		copy.sort_by_key(|builtin| builtin.0);
+		for (left, right) in Iterator::zip(copy[..].iter(), super::DEFAULT_BUILTINS[..].iter()) {
+			assert_eq!(left.0, right.0);
+		}
 	}
 }
