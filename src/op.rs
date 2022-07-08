@@ -1,12 +1,10 @@
-//! Operators.
-
-use super::env::BuiltinFn;
-use super::builtins::{builtin_add, builtin_sub, builtin_mul, builtin_div, builtin_rem, builtin_pow};
+use crate::BuiltinFn;
+use crate::builtins::{builtin_add, builtin_sub, builtin_mul, builtin_div, builtin_rem, builtin_pow};
 
 /// Operator precedence.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 #[repr(i8)]
-pub enum Order {
+pub(crate) enum Order {
 	/// Function barrier hack.
 	///
 	/// Prevents precedence rules from pushing past a function application.
@@ -30,13 +28,13 @@ pub enum Order {
 /// Operator associativity.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
-pub enum Assoc {
+pub(crate) enum Assoc {
 	/// Operator is left associative.
 	Left,
 	/// Operator is right associative.
 	Right,
-	/// Operator has no associativity, unimplemented.
-	None,
+	// /// Operator has no associativity, unimplemented.
+	// None,
 }
 
 /// Supported operator types.
@@ -64,7 +62,7 @@ pub enum Operator {
 }
 
 /// Descriptor for an operator’s builtin, precedence, associativity and if available as unary operator.
-pub struct OpDesc {
+pub(crate) struct OpDesc {
 	pub pfn: BuiltinFn,
 	pub pre: Order,
 	pub assoc: Assoc,
@@ -84,7 +82,7 @@ static OP_DESC: [OpDesc; 7] = [
 impl Operator {
 	/// Returns the operator’s descriptor.
 	#[inline]
-	pub fn desc(self) -> &'static OpDesc {
+	pub(crate) fn desc(self) -> &'static OpDesc {
 		&OP_DESC[self as usize]
 	}
 }

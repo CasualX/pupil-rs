@@ -1,8 +1,4 @@
-//! Expressions.
-
-use super::env::{Value, Error, BuiltinFn, Env};
-use super::lexer::{tokenize, Token};
-use super::op::{Operator, Order, Assoc};
+use crate::*;
 
 // Consider this a finite state automaton of some kind.
 // At any point while parsing an expression, it is either expecting a value or operator-like thing.
@@ -17,7 +13,7 @@ struct FnVal {
 
 /// The expression context.
 pub struct Expr<'a> {
-	env: &'a Env,
+	env: &'a dyn Env,
 	fns: Vec<FnVal>,
 	vals: Vec<Value>,
 	next: State,
@@ -25,9 +21,9 @@ pub struct Expr<'a> {
 
 impl<'a> Expr<'a> {
 	/// Creates a new expression and binds it to the environment.
-	pub fn new(env: &'a Env) -> Expr<'a> {
+	pub fn new(env: &'a dyn Env) -> Expr<'a> {
 		Expr {
-			env: env,
+			env,
 			fns: Vec::new(),
 			vals: Vec::new(),
 			next: State::Val,
@@ -65,11 +61,6 @@ impl<'a> Expr<'a> {
 		// Return the result
 		Ok(self.vals[0])
 	}
-	/// Evaluates and calculates the result in one step.
-	pub fn eval(mut self, input: &str) -> Result<Value, Error> {
-		self.feed(input)?;
-		self.result()
-	}
 }
 
 //----------------------------------------------------------------
@@ -105,24 +96,20 @@ impl<'a> Expr<'a> {
 					Err(Error::DisallowedUnary)
 				}
 			},
-			Token::Var(id) => {
+			Token::Var(name) => {
 				// Lookup the symbol variable
-				let result = self.env.value(id)?;
+				let result = self.env.get_value(name)?;
 				// And push the resulting value
 				self.vals.push(result);
 				// Followed by an operator
 				self.next = State::Op;
 				Ok(())
 			},
-			Token::Open(id) => {
-				// Lookup the symbol
-				let pfn = self.env.builtin(id)?;
-				// Push with very low precedence, acts as a barrier
-				self.fns.push(FnVal {
-					pfn: pfn,
-					pre: Order::FnBarrier,
-					nargs: 1,
-				});
+			Token::Open(name) => {
+				let pfn = self.env.builtin(name)?;
+				let pre = Order::FnBarrier; // Very low precedence acts as a barrier
+				let nargs = 1;
+				self.fns.push(FnVal { pfn, pre, nargs });
 				// Followed by its arguments
 				self.next = State::Val;
 				Ok(())
@@ -157,7 +144,7 @@ impl<'a> Expr<'a> {
 				match desc.assoc {
 					Assoc::Left => self.eval_ge(desc.pre)?,
 					Assoc::Right => self.eval_gt(desc.pre)?,
-					Assoc::None => return Err(Error::InternalCorruption),
+					// Assoc::None => return Err(Error::InternalError),
 				};
 				// Push operator as fn, always takes two arguments
 				self.fns.push(FnVal {
@@ -221,7 +208,7 @@ impl<'a> Expr<'a> {
 			if f.nargs as usize > self.vals.len() {
 				// This should never happen... Panic instead?
 				// Indicates a logic error when manipulating the nargs.
-				return Err(Error::InternalCorruption);
+				return Err(Error::InternalError);
 			}
 			let args = self.vals.len() - f.nargs as usize..;
 			// Apply the fn
@@ -241,43 +228,50 @@ impl<'a> Expr<'a> {
 	}
 }
 
-#[cfg(test)]
-mod tests {
-	use super::*;
-	use super::super::env::*;
+/// Evaluates and calculates the result in one step.
+///
+/// ```
+/// let env = pupil::BasicEnv::default();
+/// let result = pupil::eval(&env, "2 + 3");
+/// assert_eq!(result, Ok(5.0));
+/// ```
+pub fn eval(env: &dyn Env, input: &str) -> Result<Value, Error> {
+	let mut expr = Expr::new(env);
+	expr.feed(input)?;
+	expr.result()
+}
 
-	#[test]
-	fn basics() {
-		let env = BasicEnv::default();
-		assert_eq!(Expr::new(&env).eval("2 + 3"), Ok(5.0));
-		assert_eq!(Expr::new(&env).eval("2-3*4"), Ok(-10.0));
-		assert_eq!(Expr::new(&env).eval("2*3+4"), Ok(10.0));
-		assert_eq!(Expr::new(&env).eval("3^2-2"), Ok(7.0));
-		assert_eq!(Expr::new(&env).eval("2+---2"), Ok(0.0));
-		assert_eq!(Expr::new(&env).eval("-1"), Ok(-1.0));
-	}
-	#[test]
-	fn funcs() {
-		let env = BasicEnv::default();
-		assert_eq!(Expr::new(&env).eval("2*(3+4)"), Ok(14.0));
-		assert_eq!(Expr::new(&env).eval("mul(2,add(3,4))"), Ok(14.0));
-	}
-	#[test]
-	fn errors() {
-		let env = BasicEnv::default();
-		assert_eq!(Expr::new(&env).eval(""), Err(Error::UnfinishedExpression));
-		assert_eq!(Expr::new(&env).eval("12 5"), Err(Error::ExpectOperator));
-		assert_eq!(Expr::new(&env).eval(","), Err(Error::NaExpression));
-		assert_eq!(Expr::new(&env).eval(")"), Err(Error::NaExpression));
-		assert_eq!(Expr::new(&env).eval("*2"), Err(Error::DisallowedUnary));
-		assert_eq!(Expr::new(&env).eval("2 +"), Err(Error::UnfinishedExpression));
-		assert_eq!(Expr::new(&env).eval("!&"), Err(Error::InvalidToken));
-		assert_eq!(Expr::new(&env).eval("(2"), Err(Error::UnbalancedParens));
-		assert_eq!(Expr::new(&env).eval("(3))"), Err(Error::UnbalancedParens));
-		assert_eq!(Expr::new(&env).eval("2,"), Err(Error::MisplacedComma));
-		assert_eq!(Expr::new(&env).eval("pi()"), Err(Error::BadArgument));
-		assert_eq!(Expr::new(&env).eval("mean"), Err(Error::EnvError(EnvError::Builtin)));
-		assert_eq!(Expr::new(&env).eval("hello(5)"), Err(Error::EnvError(EnvError::NotFound)));
-		assert_eq!(Expr::new(&env).eval("hi"), Err(Error::EnvError(EnvError::NotFound)));
-	}
+#[test]
+fn basics() {
+	let env = crate::BasicEnv::default();
+	assert_eq!(eval(&env, "2 + 3"), Ok(5.0));
+	assert_eq!(eval(&env, "2-3*4"), Ok(-10.0));
+	assert_eq!(eval(&env, "2*3+4"), Ok(10.0));
+	assert_eq!(eval(&env, "3^2-2"), Ok(7.0));
+	assert_eq!(eval(&env, "2+---2"), Ok(0.0));
+	assert_eq!(eval(&env, "-1"), Ok(-1.0));
+}
+#[test]
+fn funcs() {
+	let env = crate::BasicEnv::default();
+	assert_eq!(eval(&env, "2*(3+4)"), Ok(14.0));
+	assert_eq!(eval(&env, "mul(2,add(3,4))"), Ok(14.0));
+}
+#[test]
+fn errors() {
+	let env = crate::BasicEnv::default();
+	assert_eq!(eval(&env, ""), Err(Error::UnfinishedExpression));
+	assert_eq!(eval(&env, "12 5"), Err(Error::ExpectOperator));
+	assert_eq!(eval(&env, ","), Err(Error::NaExpression));
+	assert_eq!(eval(&env, ")"), Err(Error::NaExpression));
+	assert_eq!(eval(&env, "*2"), Err(Error::DisallowedUnary));
+	assert_eq!(eval(&env, "2 +"), Err(Error::UnfinishedExpression));
+	assert_eq!(eval(&env, "!&"), Err(Error::InvalidToken));
+	assert_eq!(eval(&env, "(2"), Err(Error::UnbalancedParens));
+	assert_eq!(eval(&env, "(3))"), Err(Error::UnbalancedParens));
+	assert_eq!(eval(&env, "2,"), Err(Error::MisplacedComma));
+	assert_eq!(eval(&env, "pi()"), Err(Error::BadArgument));
+	assert_eq!(eval(&env, "mean"), Err(Error::EnvErrorBuiltinFn));
+	assert_eq!(eval(&env, "hello(5)"), Err(Error::EnvErrorNotFound));
+	assert_eq!(eval(&env, "hi"), Err(Error::EnvErrorNotFound));
 }

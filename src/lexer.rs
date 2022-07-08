@@ -1,8 +1,5 @@
-//! Lexing.
-
-use ::std::str;
-use super::env::Value;
-use super::op::Operator;
+use std::str;
+use crate::*;
 
 //----------------------------------------------------------------
 
@@ -39,34 +36,33 @@ pub enum Token<'a> {
 
 //----------------------------------------------------------------
 
-/// Iterator over tokens in a string.
 #[derive(Clone, Debug)]
-pub struct TokenIterator<'a> {
-	iter: str::Chars<'a>,
+struct TokenIterator<'a> {
+	string: &'a str,
 }
 
 impl<'a> TokenIterator<'a> {
 	fn skip_whitespace(&mut self) -> bool {
 		// Use Clones instead of Peekable...
-		let mut iter = self.iter.clone();
+		let mut iter = self.string.chars();
 		while let Some(chr) = iter.next() {
 			if !chr.is_whitespace() {
 				return true;
 			}
 			// Overwrite with previous iterator
-			self.iter = iter.clone();
+			self.string = iter.as_str();
 		}
 		return false;
 	}
 	fn lex_lit(&mut self) -> Option<Token<'a>> {
-		strtod(self.iter.as_str()).map(|(num, tail_s)| {
+		strtod(self.string).map(|(num, tail_s)| {
 			// Update the iterator to right after the number
-			self.iter = tail_s.chars();
+			self.string = tail_s;
 			Token::Lit(num)
 		})
 	}
 	fn lex_op(&mut self) -> Option<Token<'a>> {
-		let mut iter = self.iter.clone();
+		let mut iter = self.string.chars();
 		iter.next().and_then(|chr| {
 			let tok = match chr {
 				'+' => Token::Op(Operator::Add),
@@ -79,12 +75,12 @@ impl<'a> TokenIterator<'a> {
 				')' => Token::Close,
 				_ => return None,
 			};
-			self.iter = iter;
+			self.string = iter.as_str();
 			Some(tok)
 		})
 	}
 	fn lex_id(&mut self) -> Option<Token<'a>> {
-		let s = self.iter.as_str();
+		let s = self.string;
 		// Scan for a non-alphanumeric character, take whole string otherwise
 		let end = s.char_indices()
 			.find(|&(_, chr)| !chr.is_alphanumeric())
@@ -96,7 +92,7 @@ impl<'a> TokenIterator<'a> {
 		let mut paren_it = s_rem.chars();
 		// Parenthesis means a function begin
 		if paren_it.next() == Some('(') {
-			self.iter = paren_it;
+			self.string = paren_it.as_str();
 			Some(Token::Open(s_id))
 		}
 		// Otherwise is a variable
@@ -106,7 +102,7 @@ impl<'a> TokenIterator<'a> {
 				None
 			}
 			else {
-				self.iter = s_rem.chars();
+				self.string = s_rem;
 				Some(Token::Var(s_id))
 			}
 		}
@@ -114,8 +110,8 @@ impl<'a> TokenIterator<'a> {
 	fn lex_unk(&mut self) -> Option<Token<'a>> {
 		// Unknown tokens handled upstream
 		// Set the iterator to finish on next() otherwise it would never end
-		let s_rem = self.iter.as_str();
-		self.iter = "".chars();
+		let s_rem = self.string;
+		self.string = "";
 		Some(Token::Unk(s_rem))
 	}
 }
@@ -127,14 +123,13 @@ fn strtod(s: &str) -> Option<(f64, &str)> {
 	// To ‘fix’ this, copy at most 31 bytes form input and zero terminate it.
 	// Alternatively malloc some memory with CString but are you mad? It’s just a few bytes.
 	// A test was added, I guess that means it’s all good :)
-	use ::std::mem;
-	use ::libc;
+	use std::{mem, ptr};
 	unsafe {
-		let mut s_num: [libc::c_char; 32] = mem::uninitialized();
-		let s_len = ::std::cmp::min(s.len(), 31);
+		let mut s_num: [libc::c_char; 32] = [0; 32];
+		let s_len = usize::min(s.len(), 31);
 		(&mut s_num[..s_len]).clone_from_slice(mem::transmute(&s.as_bytes()[..s_len]));
 		s_num[s_len] = 0;
-		let mut s_end: *mut libc::c_char = mem::uninitialized();
+		let mut s_end: *mut libc::c_char = ptr::null_mut();
 		let num = libc::strtod(s_num.as_ptr(), &mut s_end);
 		let read = s_end as usize - s_num.as_ptr() as usize;
 		if read != 0 {
@@ -165,36 +160,29 @@ impl<'a> Iterator for TokenIterator<'a> {
 }
 
 /// Creates an iterator over the tokens in a string.
-pub fn tokenize<'a>(input: &'a str) -> TokenIterator<'a> {
-	TokenIterator {
-		iter: input.chars(),
-	}
+pub fn tokenize<'a>(string: &'a str) -> impl 'a + Iterator<Item = Token<'a>> {
+	TokenIterator { string }
 }
 
-#[cfg(test)]
-mod tests {
-	use super::{tokenize, strtod};
-	use super::Token::*;
-	use super::super::op::Operator::*;
-
-	#[test]
-	fn units() {
-		// Literals, RIP "inf" support
-		assert_eq!(tokenize("12.4 45 -0.111").collect::<Vec<_>>(),
-			vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111)]);
-		// Functions and Variables
-		assert_eq!(tokenize("fn(12, (2ans))-pi").collect::<Vec<_>>(),
-			vec![Open("fn"), Lit(12.0), Comma, Open(""), Lit(2.0), Var("ans"), Close, Close, Op(Sub), Var("pi")]);
-		// All Operators
-		assert_eq!(tokenize("1%2+3-5*-4/2^1").collect::<Vec<_>>(),
-			vec![Lit(1.0), Op(Rem), Lit(2.0), Op(Add), Lit(3.0), Op(Sub), Lit(5.0), Op(Mul), Op(Sub), Lit(4.0), Op(Div), Lit(2.0), Op(Pow), Lit(1.0)]);
-		// Unknown
-		assert_eq!(tokenize("2 + 3 * !èè&").collect::<Vec<_>>(),
-			vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("!èè&")]);
-	}
-	#[test]
-	fn regressions() {
-		// Regression test: fixed `strtod` from reading past the real input
-		assert_eq!(strtod(&"1234"[..2]), Some((12.0, "")));
-	}
+#[test]
+fn units() {
+	use crate::Token::*;
+	use crate::Operator::*;
+	// Literals, RIP "inf" support
+	assert_eq!(tokenize("12.4 45 -0.111").collect::<Vec<_>>(),
+		vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111)]);
+	// Functions and Variables
+	assert_eq!(tokenize("fn(12, (2ans))-pi").collect::<Vec<_>>(),
+		vec![Open("fn"), Lit(12.0), Comma, Open(""), Lit(2.0), Var("ans"), Close, Close, Op(Sub), Var("pi")]);
+	// All Operators
+	assert_eq!(tokenize("1%2+3-5*-4/2^1").collect::<Vec<_>>(),
+		vec![Lit(1.0), Op(Rem), Lit(2.0), Op(Add), Lit(3.0), Op(Sub), Lit(5.0), Op(Mul), Op(Sub), Lit(4.0), Op(Div), Lit(2.0), Op(Pow), Lit(1.0)]);
+	// Unknown
+	assert_eq!(tokenize("2 + 3 * !èè&").collect::<Vec<_>>(),
+		vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("!èè&")]);
+}
+#[test]
+fn regressions() {
+	// Regression test: fixed `strtod` from reading past the real input
+	assert_eq!(strtod(&"1234"[..2]), Some((12.0, "")));
 }

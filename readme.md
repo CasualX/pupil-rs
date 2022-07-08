@@ -1,6 +1,11 @@
 Pupil
 =====
 
+[![MIT License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![crates.io](https://img.shields.io/crates/v/pupil.svg)](https://crates.io/crates/pupil)
+[![docs.rs](https://docs.rs/pupil/badge.svg)](https://docs.rs/pupil)
+[![Build status](https://github.com/CasualX/pupil-rs/workflows/CI/badge.svg)](https://github.com/CasualX/pupil-rs/actions)
+
 Arithmetic expression evaluator written in Rust.
 
 It implements a butchered [Shunting-yard algorithm](https://en.wikipedia.org/wiki/Shunting-yard_algorithm).
@@ -54,9 +59,9 @@ This library can be found on [crates.io](https://crates.io/crates/pupil).
 
 In your `Cargo.toml` put:
 
-```
+```text
 [dependencies]
-pupil = "0.1"
+pupil = "0.2"
 ```
 
 A practical example can be found in `src/bin/pupil.rs`.
@@ -66,37 +71,23 @@ Documentation can be found on [docs.rs](https://docs.rs/pupil).
 Usage
 -----
 
-Start things off by creating its environment which will hold the available builtins and the last answer.
+Simple usage:
 
 ```rust
-extern crate pupil;
+// Create a basic environment with the default builtins
+let mut env = pupil::BasicEnv::default();
 
-// Creates a basic environment with the default builtins.
-let env = pupil::BasicEnv::default();
+// Evaluate expressions in this environment
+let result = pupil::eval(&env, "2 + 3");
+assert_eq!(result, Ok(5.0));
 ```
-
-Create an expression and bind it to its environment.
-
-```rust
-let mut expr = pupil::Expr::new(&env);
-
-// Feed it input, note that you cannot give it partial tokens.
-expr.feed("2 +").unwrap();
-expr.feed("3").unwrap();
-
-// Calculate the final result.
-let result = expr.result().unwrap();
-```
-
-You can perform the expression evaluation in a single step.
-
-```rust
-let result = pupil::Expr::new(&env).eval("2 + 3").unwrap();
-```
-
-That’s it.
 
 License
 -------
 
-MIT - See license.txt
+Licensed under [MIT License](https://opensource.org/licenses/MIT), see [license.txt](license.txt).
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in the work by you, shall be licensed as above, without any additional terms or conditions.

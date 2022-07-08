@@ -1,11 +1,9 @@
-extern crate pupil;
-extern crate libc;
-
-use ::std::io::{self, Write};
+use std::io::{self, Write};
+use std::env;
 
 fn main() {
 	let con = unsafe { libc::isatty(0) != 0 };
-	let args = ::std::env::args();
+	let args = env::args();
 
 	if con {
 		println!("Welcome to pupil, the arithmetic expression evaluator.");
@@ -52,7 +50,7 @@ Built-in functions:
 				println!("Ok: {}", val);
 			},
 			Err(e) => {
-				writeln!(io::stderr(), "Err: {}!", e).ok();
+				eprintln!("Err: {}!", e);
 			},
 		}
 	}
@@ -78,13 +76,13 @@ Built-in functions:
 			let line = line.trim();
 			if line.len() > 0 {
 				// Evaluate the expression
-				match pupil::Expr::new(&env).eval(&line) {
+				match pupil::eval(&env, &line) {
 					Ok(val) => {
 						println!("{}", val);
 						env.ans = val;
 					},
 					Err(e) => {
-						writeln!(io::stderr(), "Err: {}!", e).ok();
+						eprintln!("Err: {}!", e);
 					},
 				}
 			}
