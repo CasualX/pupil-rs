@@ -65,7 +65,7 @@ pub type Value = f64;
 /// Signature for builtins.
 pub type BuiltinFn = fn(env: &dyn Env, vals: &mut [Value]) -> Result<Value, Error>;
 
-static DEFAULT_BUILTINS: [(&str, BuiltinFn); 48] = {
+static DEFAULT_BUILTINS: [(&str, BuiltinFn); 53] = {
 use crate::builtins::*;
 [
 	("", builtin_id),
@@ -80,6 +80,7 @@ use crate::builtins::*;
 	("atanh", builtin_atanh),
 	("cbrt", builtin_cbrt),
 	("ceil", builtin_ceil),
+	("clamp", builtin_clamp),
 	("cos", builtin_cos),
 	("cosh", builtin_cosh),
 	("cube", builtin_cube),
@@ -106,11 +107,15 @@ use crate::builtins::*;
 	("range", builtin_range),
 	("rem", builtin_rem),
 	("round", builtin_round),
+	("signum", builtin_signum),
 	("sin", builtin_sin),
 	("sinh", builtin_sinh),
+	("smootherstep", builtin_smootherstep),
+	("smoothstep", builtin_smoothstep),
 	("sqr", builtin_sqr),
 	("sqrt", builtin_sqrt),
 	("stdev", builtin_stdev),
+	("step", builtin_step),
 	("sub", builtin_sub),
 	("tan", builtin_tan),
 	("tanh", builtin_tanh),

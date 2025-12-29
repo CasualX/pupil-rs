@@ -83,7 +83,10 @@ impl<'a> TokenIterator<'a> {
 		let s = self.string;
 		// Scan for a non-alphanumeric character, take whole string otherwise
 		let end = s.char_indices()
-			.find(|&(_, chr)| !chr.is_alphanumeric())
+			.find(|&(_, chr)| match chr {
+				'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '.' | ':' | '?' => false,
+				_ => true,
+			})
 			.map(|(pos, _)| pos)
 			.unwrap_or(s.len());
 		// Slice the identifier
@@ -181,6 +184,7 @@ fn units() {
 	assert_eq!(tokenize("2 + 3 * !èè&").collect::<Vec<_>>(),
 		vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("!èè&")]);
 }
+
 #[test]
 fn regressions() {
 	// Regression test: fixed `strtod` from reading past the real input
