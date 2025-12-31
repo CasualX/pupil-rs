@@ -1,6 +1,6 @@
 [package]
 name = "pupil"
-version = "0.2.2"
+version = "1.0.0"
 authors = ["Casper <CasualX@users.noreply.github.com>"]
 edition = "2021"
 license = "MIT"
@@ -12,8 +12,7 @@ readme = "readme.md"
 keywords = ["expr", "eval", "calc", "calculator"]
 
 [dependencies]
-libc = "0.2"
+fast-float = "0.2"
 
-[[bin]]
-name = "pupil"
-doc = false
+[dev-dependencies]
+libc = "0.2"

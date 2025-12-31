@@ -1,11 +1,10 @@
-use std::str;
-use crate::*;
+use super::*;
 
 //----------------------------------------------------------------
 
-/// Token types.
+/// Token kinds.
 #[derive(Clone, Debug, PartialEq)]
-pub enum Token<'a> {
+pub enum TokenKind<'a> {
 	/// Unknown token.
 	///
 	/// It’s the caller’s responsibility to handle this with an error of some kind.
@@ -18,13 +17,13 @@ pub enum Token<'a> {
 	Lit(Value),
 	/// Operator token.
 	Op(Operator),
-	/// Variable token.
+	/// Variable symbol, not followed by `(`.
 	///
-	/// Alphanumeric characters only. Not followed by a `(`.
+	/// Character set: `[a-zA-Z0-9_.:?!$@#]`
 	Var(&'a str),
-	/// Function token.
+	/// Function symbol, implicitly followed by `(`.
 	///
-	/// Alphanumeric characters only. Implicitly followed by a `(`.
+	/// Character set: `[a-zA-Z0-9_.:?!$@#]`
 	Open(&'a str),
 	/// Comma token `,`.
 	///
@@ -34,11 +33,48 @@ pub enum Token<'a> {
 	Close,
 }
 
+/// Token structure.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Token<'a> {
+	pub kind: TokenKind<'a>,
+	pub position: usize,
+}
+
 //----------------------------------------------------------------
+
+// Valid identifier characters lookup table.
+static VALID_ID_CHARS: [u8; 16] = {
+	const fn set_bit(table: &mut [u8; 16], chr: u8) {
+		let index = (chr / 8) as usize;
+		let bit = 1 << (chr % 8);
+		table[index] |= bit;
+	}
+	const fn set_bits(table: &mut [u8; 16], start: u8, end: u8) {
+		let mut chr = start;
+		while chr <= end {
+			set_bit(table, chr);
+			chr += 1;
+		}
+	}
+	let mut table = [0u8; 16];
+	set_bits(&mut table, b'a', b'z');
+	set_bits(&mut table, b'A', b'Z');
+	set_bits(&mut table, b'0', b'9');
+	set_bit(&mut table, b'_');
+	set_bit(&mut table, b'.');
+	set_bit(&mut table, b':');
+	set_bit(&mut table, b'?');
+	set_bit(&mut table, b'!');
+	set_bit(&mut table, b'$');
+	set_bit(&mut table, b'@');
+	set_bit(&mut table, b'#');
+	table
+};
 
 #[derive(Clone, Debug)]
 struct TokenIterator<'a> {
 	string: &'a str,
+	position: usize,
 }
 
 impl<'a> TokenIterator<'a> {
@@ -49,43 +85,46 @@ impl<'a> TokenIterator<'a> {
 			if !chr.is_whitespace() {
 				return true;
 			}
-			// Overwrite with previous iterator
+			// Track position and overwrite with previous iterator
+			self.position += chr.len_utf8();
 			self.string = iter.as_str();
 		}
 		return false;
 	}
-	fn lex_lit(&mut self) -> Option<Token<'a>> {
-		strtod(self.string).map(|(num, tail_s)| {
-			// Update the iterator to right after the number
-			self.string = tail_s;
-			Token::Lit(num)
-		})
+	fn lex_lit(&mut self) -> Option<TokenKind<'a>> {
+		let (num, read) = fast_float::parse_partial(self.string).ok()?;
+		self.string = &self.string[read..];
+		self.position += read;
+		Some(TokenKind::Lit(num))
 	}
-	fn lex_op(&mut self) -> Option<Token<'a>> {
+	fn lex_op(&mut self) -> Option<TokenKind<'a>> {
 		let mut iter = self.string.chars();
 		iter.next().and_then(|chr| {
 			let tok = match chr {
-				'+' => Token::Op(Operator::Add),
-				'-' => Token::Op(Operator::Sub),
-				'*' => Token::Op(Operator::Mul),
-				'/' => Token::Op(Operator::Div),
-				'%' => Token::Op(Operator::Rem),
-				'^' => Token::Op(Operator::Pow),
-				',' => Token::Comma,
-				')' => Token::Close,
+				'+' => TokenKind::Op(Operator::Add),
+				'-' => TokenKind::Op(Operator::Sub),
+				'*' => TokenKind::Op(Operator::Mul),
+				'/' => TokenKind::Op(Operator::Div),
+				'%' => TokenKind::Op(Operator::Rem),
+				'^' => TokenKind::Op(Operator::Pow),
+				',' => TokenKind::Comma,
+				')' => TokenKind::Close,
 				_ => return None,
 			};
 			self.string = iter.as_str();
+			self.position += chr.len_utf8();
 			Some(tok)
 		})
 	}
-	fn lex_id(&mut self) -> Option<Token<'a>> {
+	fn lex_id(&mut self) -> Option<TokenKind<'a>> {
 		let s = self.string;
 		// Scan for a non-alphanumeric character, take whole string otherwise
 		let end = s.char_indices()
-			.find(|&(_, chr)| match chr {
-				'a'..='z' | 'A'..='Z' | '0'..='9' | '_' | '.' | ':' | '?' => false,
-				_ => true,
+			.find(|&(_, chr)| if chr as u32 >= 128 {
+				false
+			} else {
+				let byte = chr as u8;
+				(VALID_ID_CHARS[(byte / 8) as usize] & (1 << (byte % 8))) == 0
 			})
 			.map(|(pos, _)| pos)
 			.unwrap_or(s.len());
@@ -96,7 +135,7 @@ impl<'a> TokenIterator<'a> {
 		// Parenthesis means a function begin
 		if paren_it.next() == Some('(') {
 			self.string = paren_it.as_str();
-			Some(Token::Open(s_id))
+			Some(TokenKind::Open(s_id))
 		}
 		// Otherwise is a variable
 		else {
@@ -106,41 +145,17 @@ impl<'a> TokenIterator<'a> {
 			}
 			else {
 				self.string = s_rem;
-				Some(Token::Var(s_id))
+				Some(TokenKind::Var(s_id))
 			}
 		}
 	}
-	fn lex_unk(&mut self) -> Option<Token<'a>> {
+	fn lex_unk(&mut self) -> Option<TokenKind<'a>> {
 		// Unknown tokens handled upstream
 		// Set the iterator to finish on next() otherwise it would never end
 		let s_rem = self.string;
+		self.position += s_rem.len();
 		self.string = "";
-		Some(Token::Unk(s_rem))
-	}
-}
-
-fn strtod(s: &str) -> Option<(f64, &str)> {
-	// Yeah let’s go `strtod`!
-	// ...
-	// Fun fact: Rust strings aren’t zero-terminated, but `strtod` cares...
-	// To ‘fix’ this, copy at most 31 bytes form input and zero terminate it.
-	// Alternatively malloc some memory with CString but are you mad? It’s just a few bytes.
-	// A test was added, I guess that means it’s all good :)
-	use std::{mem, ptr};
-	unsafe {
-		let mut s_num: [libc::c_char; 32] = [0; 32];
-		let s_len = usize::min(s.len(), 31);
-		(&mut s_num[..s_len]).clone_from_slice(mem::transmute(&s.as_bytes()[..s_len]));
-		s_num[s_len] = 0;
-		let mut s_end: *mut libc::c_char = ptr::null_mut();
-		let num = libc::strtod(s_num.as_ptr(), &mut s_end);
-		let read = s_end as usize - s_num.as_ptr() as usize;
-		if read != 0 {
-			Some((num as f64, &s[read..]))
-		}
-		else {
-			None
-		}
+		Some(TokenKind::Unk(s_rem))
 	}
 }
 
@@ -149,11 +164,14 @@ impl<'a> Iterator for TokenIterator<'a> {
 	fn next(&mut self) -> Option<Token<'a>> {
 		// Start by skipping over the whitespace
 		if self.skip_whitespace() {
+			// Record position before lexing the token
+			let position = self.position;
 			// Try lexing as various tokens
-			self.lex_op()
+			let kind = self.lex_op()
 				.or_else(|| self.lex_lit())
 				.or_else(|| self.lex_id())
-				.or_else(|| self.lex_unk())
+				.or_else(|| self.lex_unk())?;
+			Some(Token { kind, position })
 		}
 		// End of string
 		else {
@@ -164,29 +182,25 @@ impl<'a> Iterator for TokenIterator<'a> {
 
 /// Creates an iterator over the tokens in a string.
 pub fn tokenize<'a>(string: &'a str) -> impl 'a + Iterator<Item = Token<'a>> {
-	TokenIterator { string }
+	TokenIterator { string, position: 0 }
 }
 
 #[test]
 fn units() {
-	use crate::Token::*;
-	use crate::Operator::*;
+	use TokenKind::*;
+	use Operator::*;
+	// Helper to extract just the kinds for comparison
+	let kinds = |s: &'static str| tokenize(s).map(|t| t.kind).collect::<Vec<_>>();
 	// Literals, RIP "inf" support
-	assert_eq!(tokenize("12.4 45 -0.111").collect::<Vec<_>>(),
+	assert_eq!(kinds("12.4 45 -0.111"),
 		vec![Lit(12.4), Lit(45.0), Op(Sub), Lit(0.111)]);
 	// Functions and Variables
-	assert_eq!(tokenize("fn(12, (2ans))-pi").collect::<Vec<_>>(),
+	assert_eq!(kinds("fn(12, (2ans))-pi"),
 		vec![Open("fn"), Lit(12.0), Comma, Open(""), Lit(2.0), Var("ans"), Close, Close, Op(Sub), Var("pi")]);
 	// All Operators
-	assert_eq!(tokenize("1%2+3-5*-4/2^1").collect::<Vec<_>>(),
+	assert_eq!(kinds("1%2+3-5*-4/2^1"),
 		vec![Lit(1.0), Op(Rem), Lit(2.0), Op(Add), Lit(3.0), Op(Sub), Lit(5.0), Op(Mul), Op(Sub), Lit(4.0), Op(Div), Lit(2.0), Op(Pow), Lit(1.0)]);
 	// Unknown
-	assert_eq!(tokenize("2 + 3 * !èè&").collect::<Vec<_>>(),
-		vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("!èè&")]);
-}
-
-#[test]
-fn regressions() {
-	// Regression test: fixed `strtod` from reading past the real input
-	assert_eq!(strtod(&"1234"[..2]), Some((12.0, "")));
+	assert_eq!(kinds("2 + 3 * `èè&"),
+		vec![Lit(2.0), Op(Add), Lit(3.0), Op(Mul), Unk("`èè&")]);
 }

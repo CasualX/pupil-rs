@@ -18,8 +18,11 @@ Built-in functions:
   ans     : Use answer from previous expression.
   pi, tau : Trigonometric constants.
   e       : Euler’s number.
-  add, sub, mul, div, rem, pow, floor, ceil, round,
-  abs, sqr, cube, sqrt, cbrt, min, max, gamma, fac,
+  add, sub, mul, div, rem, pow,
+  floor, ceil, trunc, round, fract,
+  abs, sign, sqr, cube, sqrt, cbrt, isinf, isnan,
+  min, max, clamp, step, smoothstep, smootherstep,
+  eq, ne, lt, le, gt, ge, all, any, not, select,
   exp, expm1, ln, log, log2, log10, ln1p,
   mean, median, range, var, stdev,
   deg, rad, sin, cos, tan, asin, acos, atan, atan2,
@@ -82,7 +85,7 @@ Built-in functions:
 						env.ans = val;
 					},
 					Err(e) => {
-						eprintln!("Err: {}!", e);
+						eprint!("    {}", e.compact_diagnostic(&line));
 					},
 				}
 			}

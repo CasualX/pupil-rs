@@ -1,185 +1,135 @@
-use std::{error, fmt};
+use super::*;
 
-//----------------------------------------------------------------
-
-/// Things that can go wrong.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-#[non_exhaustive]
-pub enum Error {
-	/// Expected an operator-like thing.
-	///
-	/// Eg. `12 5`. Expected an operator instead of `5`.
-	ExpectOperator,
-	/// Expected a value-like thing.
-	NaExpression,
-	/// Disallowed unary operator.
-	///
-	/// Only `+` and `-` are allowed as unary operators.
-	DisallowedUnary,
-	/// Something went wrong unexpectedly.
-	///
-	/// This is a bug.
-	InternalError,
-	/// Expression isn’t finished, cannot end with an operator.
-	///
-	/// Eg. `2 +`.
-	UnfinishedExpression,
-	/// Tokenization failed to lex a token.
-	InvalidToken,
-	/// Different number of `(` and `)`.
-	UnbalancedParens,
-	/// Misplaced a comma token outside of a function application.
-	MisplacedComma,
-	/// Bad number of arguments.
-	BadArgument,
-	/// A variable or function symbol wasn’t found.
-	EnvErrorNotFound,
-	/// Expected a variable name, found a builtin symbol instead.
-	EnvErrorBuiltinFn,
+/// Environment interface.
+///
+/// Stores the builtins available to expressions.
+pub trait Env {
+	/// Lookup a native function.
+	fn function(&self, name: &str) -> Result<Function, ErrorKind>;
+	/// Gets a variable’s value.
+	fn value(&self, name: &str) -> Result<Value, ErrorKind>;
+	/// Sets a variable’s value.
+	fn set_value(&mut self, name: &str, value: Value) -> Result<(), ErrorKind>;
 }
-impl fmt::Display for Error {
-	fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-		let desc = match self {
-			Error::ExpectOperator => "expected an operator",
-			Error::NaExpression => "not an expression",
-			Error::DisallowedUnary => "not an unary operator",
-			Error::InternalError => "internal corruption",
-			Error::UnfinishedExpression => "unfinished expression",
-			Error::InvalidToken => "invalid token",
-			Error::UnbalancedParens => "unbalanced parens",
-			Error::MisplacedComma => "misplaced comma",
-			Error::BadArgument => "bad argument",
-			Error::EnvErrorNotFound => "env error not found",
-			Error::EnvErrorBuiltinFn => "env error builtin",
-		};
-		desc.fmt(f)
-	}
-}
-impl error::Error for Error {}
 
 //----------------------------------------------------------------
 
 /// Underlying type used for arithmetic.
 pub type Value = f64;
 
-/// Signature for builtins.
-pub type BuiltinFn = fn(env: &dyn Env, vals: &mut [Value]) -> Result<Value, Error>;
+/// Signature for native functions.
+pub type Function = fn(env: &dyn Env, vals: &mut [Value]) -> Result<Value, ErrorKind>;
 
-static DEFAULT_BUILTINS: [(&str, BuiltinFn); 63] = {
-use crate::builtins::*;
-[
-	("", builtin_id),
-	("abs", builtin_abs),
-	("acos", builtin_cos),
-	("acosh", builtin_acosh),
-	("add", builtin_add),
-	("all", builtin_all),
-	("any", builtin_any),
-	("asin", builtin_asin),
-	("asinh", builtin_asinh),
-	("atan", builtin_atan),
-	("atan2", builtin_atan2),
-	("atanh", builtin_atanh),
-	("cbrt", builtin_cbrt),
-	("ceil", builtin_ceil),
-	("clamp", builtin_clamp),
-	("cos", builtin_cos),
-	("cosh", builtin_cosh),
-	("cube", builtin_cube),
-	("deg", builtin_deg),
-	("div", builtin_div),
-	("e", builtin_e),
-	("eq", builtin_eq),
-	("exp", builtin_exp),
-	("exp2", builtin_exp2),
-	("expm1", builtin_expm1),
-	("floor", builtin_floor),
-	("ge", builtin_ge),
-	("gt", builtin_gt),
-	("le", builtin_le),
-	("ln", builtin_ln),
-	("ln1p", builtin_ln1p),
-	("log", builtin_log),
-	("log10", builtin_log10),
-	("log2", builtin_log2),
-	("lt", builtin_lt),
-	("max", builtin_max),
-	("mean", builtin_mean),
-	("median", builtin_median),
-	("min", builtin_min),
-	("mul", builtin_mul),
-	("ne", builtin_ne),
-	("not", builtin_not),
-	("pi", builtin_pi),
-	("pow", builtin_pow),
-	("rad", builtin_rad),
-	("range", builtin_range),
-	("rem", builtin_rem),
-	("round", builtin_round),
-	("select", builtin_select),
-	("signum", builtin_signum),
-	("sin", builtin_sin),
-	("sinh", builtin_sinh),
-	("smootherstep", builtin_smootherstep),
-	("smoothstep", builtin_smoothstep),
-	("sqr", builtin_sqr),
-	("sqrt", builtin_sqrt),
-	("stdev", builtin_stdev),
-	("step", builtin_step),
-	("sub", builtin_sub),
-	("tan", builtin_tan),
-	("tanh", builtin_tanh),
-	("tau", builtin_tau),
-	("var", builtin_var),
-]
-};
+/// Looks up a native function by name.
+pub fn function(name: &str) -> Option<Function> {
+	let function = match name {
+		"" => native::id,
 
-/// The environment.
-///
-/// Stores the builtin functions and variables available to expressions.
-pub trait Env {
-	/// Lookup a builtin function.
-	fn builtin(&self, name: &str) -> Result<BuiltinFn, Error>;
-	/// Gets a variable’s value.
-	fn get_value(&self, name: &str) -> Result<Value, Error>;
-	/// Sets a variable’s value.
-	fn set_value(&mut self, name: &str, value: Value) -> Result<(), Error>;
+		"add" => native::add,
+		"sub" => native::sub,
+		"mul" => native::mul,
+		"div" => native::div,
+		"rem" => native::rem,
+		"pow" => native::pow,
+
+		"round" => native::round,
+		"floor" => native::floor,
+		"ceil" => native::ceil,
+		"trunc" => native::trunc,
+		"fract" => native::fract,
+
+		"abs" => native::abs,
+		"sign" => native::sign,
+		"sqr" => native::sqr,
+		"sqrt" => native::sqrt,
+		"cube" => native::cube,
+		"cbrt" => native::cbrt,
+		"isinf" => native::isinf,
+		"isnan" => native::isnan,
+
+		"min" => native::min,
+		"max" => native::max,
+		"clamp" => native::clamp,
+
+		"step" => native::step,
+		"smoothstep" => native::smoothstep,
+		"smootherstep" => native::smootherstep,
+
+		"eq" => native::eq,
+		"ne" => native::ne,
+		"gt" => native::gt,
+		"ge" => native::ge,
+		"lt" => native::lt,
+		"le" => native::le,
+
+		"all" => native::all,
+		"any" => native::any,
+		"not" => native::not,
+		"select" => native::select,
+
+		"exp" => native::exp,
+		"exp2" => native::exp2,
+		"expm1" => native::expm1,
+		"log" => native::log,
+		"log10" => native::log10,
+		"log2" => native::log2,
+		"ln" => native::ln,
+		"ln1p" => native::ln1p,
+
+		"mean" => native::mean,
+		"median" => native::median,
+		"range" => native::range,
+		"var" => native::var,
+		"stdev" => native::stdev,
+
+		"deg" => native::deg,
+		"rad" => native::rad,
+		"sin" => native::sin,
+		"cos" => native::cos,
+		"tan" => native::tan,
+		"asin" => native::asin,
+		"acos" => native::acos,
+		"atan" => native::atan,
+		"atan2" => native::atan2,
+
+		"sinh" => native::sinh,
+		"cosh" => native::cosh,
+		"tanh" => native::tanh,
+		"asinh" => native::asinh,
+		"acosh" => native::acosh,
+		"atanh" => native::atanh,
+
+		_ => return None,
+	};
+	Some(function)
 }
 
 /// Basic environment.
 ///
 /// Supports just the default builtins and saves the last answer.
-#[derive(Clone)]
-pub struct BasicEnv<'a> {
+#[derive(Clone, Default)]
+pub struct BasicEnv {
 	pub ans: Value,
-	pub builtins: &'a [(&'a str, BuiltinFn)],
 }
-impl<'a> Default for BasicEnv<'a> {
-	fn default() -> BasicEnv<'a> {
-		BasicEnv {
-			ans: 0.0f64,
-			builtins: &DEFAULT_BUILTINS,
-		}
+
+impl Env for BasicEnv {
+	fn function(&self, name: &str) -> Result<Function, ErrorKind> {
+		function(name).ok_or(ErrorKind::NameNotFound)
 	}
-}
-impl<'a> Env for BasicEnv<'a> {
-	fn builtin(&self, name: &str) -> Result<BuiltinFn, Error> {
-		match self.builtins.binary_search_by_key(&name, |it| it.0) {
-			Ok(index) => Ok(self.builtins[index].1),
-			Err(_) => Err(Error::EnvErrorNotFound),
-		}
+	fn value(&self, name: &str) -> Result<Value, ErrorKind> {
+		let value = match name {
+			"ans" => self.ans,
+			"e" => f64::consts::E,
+			"pi" => f64::consts::PI,
+			"tau" => f64::consts::TAU,
+			_ => return Err(ErrorKind::NameNotFound),
+		};
+		Ok(value)
 	}
-	fn get_value(&self, name: &str) -> Result<Value, Error> {
-		match name {
-			"ans" => Ok(self.ans),
-			// Builtins which take zero arguments are treated as constants
-			_ => self.builtin(name)?(self, &mut []).map_err(|_| Error::EnvErrorBuiltinFn),
-		}
-	}
-	fn set_value(&mut self, name: &str, value: Value) -> Result<(), Error> {
+	fn set_value(&mut self, name: &str, value: Value) -> Result<(), ErrorKind> {
 		match name {
 			"ans" => self.ans = value,
-			_ => return Err(Error::EnvErrorNotFound),
+			_ => return Err(ErrorKind::NameNotFound),
 		}
 		Ok(())
 	}
@@ -191,15 +141,8 @@ impl<'a> Env for BasicEnv<'a> {
 fn var() {
 	let mut env = BasicEnv::default();
 	env.set_value("ans", 12.4).unwrap();
-	assert_eq!(env.get_value("ans"), Ok(12.4));
-	assert_eq!(env.get_value("pi"), Ok(std::f64::consts::PI));
-	assert_eq!(env.get_value("unknown"), Err(Error::EnvErrorNotFound));
-	assert_eq!(env.get_value("mean"), Err(Error::EnvErrorBuiltinFn));
-	
-	// Assert the default builtins are sorted
-	let mut copy = DEFAULT_BUILTINS;
-	copy.sort_by_key(|builtin| builtin.0);
-	for ((left, _), (right, _)) in Iterator::zip(copy.iter(), DEFAULT_BUILTINS.iter()) {
-		assert_eq!(left, right);
-	}
+	assert_eq!(env.value("ans"), Ok(12.4));
+	assert_eq!(env.value("pi"), Ok(f64::consts::PI));
+	assert_eq!(env.value("unknown"), Err(ErrorKind::NameNotFound));
+	assert_eq!(env.value("mean"), Err(ErrorKind::NameNotFound));
 }

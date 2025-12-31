@@ -57,16 +57,16 @@ Library
 
 This library can be found on [crates.io](https://crates.io/crates/pupil).
 
-In your `Cargo.toml` put:
-
-```text
-[dependencies]
-pupil = "0.2"
-```
-
-A practical example can be found in `src/bin/pupil.rs`.
+A practical example can be found in [examples/pupil.rs](examples/pupil.rs).
 
 Documentation can be found on [docs.rs](https://docs.rs/pupil).
+
+In your `Cargo.toml` put:
+
+```toml
+[dependencies]
+pupil = "1.0"
+```
 
 Usage
 -----

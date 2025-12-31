@@ -1,5 +1,4 @@
-use crate::BuiltinFn;
-use crate::builtins::{builtin_add, builtin_sub, builtin_mul, builtin_div, builtin_rem, builtin_pow};
+use super::*;
 
 /// Operator precedence.
 #[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -19,10 +18,10 @@ pub(crate) enum Order {
 	/// This makes implicit mul bind tightly under division allowing `1/2ans` to be evaulated as `1/(2*ans)`.
 	/// But not high enough to overpower exponentiation so `2ans^3` will be evaluated as `2*(ans^3)`.
 	IMul,
-	/// Exponentiation precedence.
-	Pow,
 	/// Unary operator precedence.
 	Unary,
+	/// Exponentiation precedence.
+	Pow,
 }
 
 /// Operator associativity.
@@ -61,22 +60,22 @@ pub enum Operator {
 	Pow,
 }
 
-/// Descriptor for an operator’s builtin, precedence, associativity and if available as unary operator.
+/// Descriptor for an operator’s function, precedence, associativity and if available as unary operator.
 pub(crate) struct OpDesc {
-	pub pfn: BuiltinFn,
+	pub pfn: Function,
 	pub pre: Order,
 	pub assoc: Assoc,
 	pub unary: bool,
 }
 
 static OP_DESC: [OpDesc; 7] = [
-	OpDesc { pfn: builtin_add, pre: Order::AddSub, assoc: Assoc::Left, unary: true },
-	OpDesc { pfn: builtin_sub, pre: Order::AddSub, assoc: Assoc::Left, unary: true },
-	OpDesc { pfn: builtin_mul, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
-	OpDesc { pfn: builtin_div, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
-	OpDesc { pfn: builtin_rem, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
-	OpDesc { pfn: builtin_mul, pre: Order::IMul, assoc: Assoc::Left, unary: false },
-	OpDesc { pfn: builtin_pow, pre: Order::Pow, assoc: Assoc::Right, unary: false },
+	OpDesc { pfn: native::add, pre: Order::AddSub, assoc: Assoc::Left, unary: true },
+	OpDesc { pfn: native::sub, pre: Order::AddSub, assoc: Assoc::Left, unary: true },
+	OpDesc { pfn: native::mul, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
+	OpDesc { pfn: native::div, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
+	OpDesc { pfn: native::rem, pre: Order::MulDiv, assoc: Assoc::Left, unary: false },
+	OpDesc { pfn: native::mul, pre: Order::IMul, assoc: Assoc::Left, unary: false },
+	OpDesc { pfn: native::pow, pre: Order::Pow, assoc: Assoc::Right, unary: false },
 ];
 
 impl Operator {
