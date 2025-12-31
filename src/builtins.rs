@@ -108,6 +108,74 @@ pub fn builtin_clamp(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
 	};
 	Ok(value.max(min).min(max))
 }
+pub fn builtin_eq(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	match vals {
+		&mut [lhs, rhs] => if lhs == rhs { Ok(1f64) } else { Ok(0f64) },
+		&mut [lhs, rhs, tolerance] => if (lhs - rhs).abs() <= tolerance.abs() { Ok(1f64) } else { Ok(0f64) },
+		_ => Err(Error::BadArgument),
+	}
+}
+pub fn builtin_ne(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	match vals {
+		&mut [lhs, rhs] => if lhs != rhs { Ok(1f64) } else { Ok(0f64) },
+		&mut [lhs, rhs, tolerance] => if (lhs - rhs).abs() > tolerance.abs() { Ok(1f64) } else { Ok(0f64) },
+		_ => Err(Error::BadArgument),
+	}
+}
+pub fn builtin_lt(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	let &mut [lhs, rhs] = vals else {
+		return Err(Error::BadArgument);
+	};
+	if lhs < rhs { Ok(1f64) } else { Ok(0f64) }
+}
+pub fn builtin_le(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	let &mut [lhs, rhs] = vals else {
+		return Err(Error::BadArgument);
+	};
+	if lhs <= rhs { Ok(1f64) } else { Ok(0f64) }
+}
+pub fn builtin_gt(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	let &mut [lhs, rhs] = vals else {
+		return Err(Error::BadArgument);
+	};
+	if lhs > rhs { Ok(1f64) } else { Ok(0f64) }
+}
+pub fn builtin_ge(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	let &mut [lhs, rhs] = vals else {
+		return Err(Error::BadArgument);
+	};
+	if lhs >= rhs { Ok(1f64) } else { Ok(0f64) }
+}
+pub fn builtin_all(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	for &val in vals.iter() {
+		if val == 0f64 {
+			return Ok(0f64);
+		}
+	}
+	Ok(1f64)
+}
+pub fn builtin_any(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	for &val in vals.iter() {
+		if val != 0f64 {
+			return Ok(1f64);
+		}
+	}
+	Ok(0f64)
+}
+pub fn builtin_not(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	let &mut [value] = vals else {
+		return Err(Error::BadArgument);
+	};
+	Ok(1.0 - value.signum().abs())
+}
+pub fn builtin_select(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
+	if vals.len() < 2 {
+		return Err(Error::BadArgument);
+	}
+	let index = vals[0].floor() as i32 as usize;
+	let choices = &vals[1..];
+	choices.get(index).cloned().ok_or(Error::BadArgument)
+}
 pub fn builtin_step(_: &dyn Env, vals: &mut [Value]) -> Result<Value, Error> {
 	let &mut [value] = vals else {
 		return Err(Error::BadArgument);
